@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#FF6B00">
+    <title>SSKG Katha</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- CDN Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="lib/jspdf.umd.min.js"></script>
+    <script src="lib/lz-string.min.js"></script>
+    
+    <!-- CACHE BUSTER -->
+    <script>
+        const APP_VER = 'v6';
+        if (localStorage.getItem('app_version') !== APP_VER) {
+            Promise.all([
+                'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))) : Promise.resolve(),
+                'caches' in window ? caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))) : Promise.resolve()
+            ]).then(() => {
+                localStorage.setItem('app_version', APP_VER);
+                window.location.href = window.location.href.split('?')[0] + '?v=' + Date.now();
+            });
+        }
+    </script>
+</head>
+<body>
+    <div id="app-container">
+        
+        <!-- Auth Screen -->
+        <div id="auth-screen">
+            <h1 style="font-size: 24px; padding: 0 10px;">Sai Saranya Kirana and General Store</h1>
+            <p class="mb-4 text-muted">Enter PIN to access</p>
+            <input type="password" id="pin-input" inputmode="numeric" maxlength="4" placeholder="****">
+            <button id="login-btn" class="btn btn-primary">Unlock 🔓</button>
+            <p id="auth-error" class="amount-red mt-4" style="display:none;">Incorrect PIN</p>
+        </div>
+
+        <!-- Header -->
+        <header id="main-header" style="display:none;">
+            <h2 id="header-title">Dashboard</h2>
+            <div>
+                <button id="logout-btn" class="icon-btn" title="Logout">🚪</button>
+                <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content" style="display:none;">
+            
+            <!-- Draft Banner -->
+            <div id="draft-banner" class="banner" style="display:none;">
+                <span>Unsaved entry found!</span>
+                <button id="resume-draft-btn" class="btn btn-small btn-primary">Resume</button>
+                <button id="discard-draft-btn" class="btn btn-small btn-outline">Discard</button>
+            </div>
+
+            <!-- View: Dashboard -->
+            <div id="view-dashboard" class="view active">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Kathas Today</div>
+                        <div class="kpi-value" id="kpi-kathas-today">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Paid Today</div>
+                        <div class="kpi-value" id="kpi-paid-today">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Month Total</div>
+                        <div class="kpi-value amount-red" id="kpi-month-total">₹0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Highest Katha</div>
+                        <div class="kpi-value" id="kpi-highest-name">-</div>
+                        <div class="amount-red" id="kpi-highest-amount">₹0</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h3 class="mb-3">Weekly Comparison</h3>
+                    <canvas id="weeklyChart" height="200"></canvas>
+                </div>
+
+                <button id="generate-report-btn" class="btn btn-primary mb-4">📄 Generate Today's Report</button>
+            </div>
+
+            <!-- View: Katha List -->
+            <div id="view-katha" class="view">
+                <div class="flex-row-between gap-3 mb-4">
+                    <button id="add-contact-btn" class="btn btn-outline" style="flex:1;">➕ From Contacts</button>
+                    <button id="add-manual-btn" class="btn btn-primary" style="flex:1;">✏️ Add Manually</button>
+                </div>
+                
+                <div class="form-group mb-4">
+                    <input type="text" id="katha-search" class="form-control" placeholder="Search customer...">
+                </div>
+
+                <div id="katha-list" class="list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- View: Customer Profile -->
+            <div id="view-customer" class="view">
+                <div class="mb-4">
+                    <button id="back-to-katha-btn" class="btn btn-outline btn-small mb-3">⬅ Back</button>
+                    <h2 id="cust-name">Customer Name</h2>
+                    <p id="cust-phone" class="text-muted">9999999999</p>
+                    <div class="kpi-card mt-4 mb-4">
+                        <div class="kpi-label">Total Balance</div>
+                        <div class="kpi-value amount-red" id="cust-balance" style="font-size: 32px;">₹0</div>
+                    </div>
+                </div>
+
+                <div class="flex-row-between gap-2 mb-4">
+                    <button id="mark-paid-btn" class="btn btn-success" style="flex:1;">💰 Mark Paid</button>
+                    <button id="whatsapp-btn" class="btn btn-outline" style="flex:1;">📱 Remind</button>
+                </div>
+                <div class="flex-row-between gap-2 mb-4">
+                    <button id="invoice-btn" class="btn btn-outline" style="flex:1;">🧾 Invoice</button>
+                    <button id="statement-btn" class="btn btn-outline" style="flex:1;">📋 Statement</button>
+                </div>
+
+                <div class="tabs">
+                    <div class="tab active" data-target="tab-normal">Normal</div>
+                    <div class="tab" data-target="tab-daily">Daily Auto</div>
+                </div>
+
+                <div id="tab-normal" class="tab-content active">
+                    <button id="new-katha-btn" class="btn btn-primary mb-4">➕ Add Items</button>
+                </div>
+
+                <div id="tab-daily" class="tab-content">
+                    <div class="flex-row-between mb-3">
+                        <span>Auto-Add Status</span>
+                        <input type="checkbox" id="daily-active-toggle">
+                    </div>
+                    <button id="edit-daily-btn" class="btn btn-outline mb-4">⚙️ Configure Daily Items</button>
+                    <div id="daily-items-list" class="list"></div>
+                </div>
+
+                <h3 class="mb-3 mt-4">History</h3>
+                <div id="cust-history-list" class="list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- View: History Log -->
+            <div id="view-history" class="view">
+                <div class="form-group mb-4">
+                    <select id="history-filter" class="form-control">
+                        <option value="all">All Events</option>
+                        <option value="katha_added">Katha Added</option>
+                        <option value="payment_received">Payments</option>
+                    </select>
+                </div>
+                <div id="global-history-list" class="list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- View: Katha Detail -->
+            <div id="view-katha-detail" class="view">
+                <button id="back-from-detail-btn" class="btn btn-outline btn-small mb-4">⬅ Back</button>
+                <div class="kpi-card mb-4">
+                    <h2 id="detail-title" class="mb-2">Entry Details</h2>
+                    <p id="detail-date" class="text-muted mb-3"></p>
+                    <div id="detail-amount" class="amount-red" style="font-size: 32px; font-weight: bold;">₹0</div>
+                </div>
+                
+                <div id="detail-items-section">
+                    <h3 class="mb-3">Items</h3>
+                    <div id="detail-items-list" class="list mb-4">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <div id="detail-payment-edit-section" style="display:none;" class="kpi-card mb-4 text-left">
+                    <h3 class="mb-3">Edit Payment</h3>
+                    <div class="form-group">
+                        <label>New Amount</label>
+                        <input type="number" id="edit-payment-amount" class="form-control">
+                    </div>
+                    <div class="form-group" id="edit-payment-reason-group">
+                        <label>Reason for change (Required)</label>
+                        <input type="text" id="edit-payment-reason" class="form-control" placeholder="Entered wrong amount">
+                    </div>
+                    <button id="save-edit-payment-btn" class="btn btn-primary">Save Changes</button>
+                </div>
+            </div>
+
+            <!-- View: Settings -->
+            <div id="view-settings" class="view">
+                <button id="back-from-settings-btn" class="btn btn-outline btn-small mb-4">⬅ Back</button>
+                <h2 class="mb-4">Settings</h2>
+                
+                <div class="kpi-card mb-4" style="text-align:left;">
+                    <h3 class="mb-2">Shop Profile</h3>
+                    <div style="display:flex; justify-content:center; margin: 16px 0;">
+                        <input type="file" id="profile-photo-input" accept="image/*" style="display:none;">
+                        <div id="profile-photo-placeholder" style="width: 100px; height: 100px; border-radius: 50%; background: var(--border); display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="document.getElementById('profile-photo-input').click()">
+                            <span style="font-size: 30px;">📷</span>
+                        </div>
+                        <img id="profile-photo-img" style="width: 100px; height: 100px; border-radius: 50%; display:none; object-fit:cover; cursor:pointer;" onclick="document.getElementById('profile-photo-input').click()">
+                    </div>
+                    <p class="text-center text-muted mb-3" style="font-size: 12px;">Tap to change photo (saved locally)</p>
+                    
+                    <div class="form-group mb-3">
+                        <label>Shop Phone Number (For Invoice)</label>
+                        <input type="text" id="shop-phone-input" class="form-control" placeholder="e.g. 9876543210">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label>Shop Address (For Invoice)</label>
+                        <input type="text" id="shop-address-input" class="form-control" placeholder="e.g. 123 Main St">
+                    </div>
+                    <button id="save-shop-details-btn" class="btn btn-primary btn-small mb-2" style="width:100%;">Save Shop Details</button>
+                </div>
+
+                <div class="kpi-card mb-4" style="text-align:left;">
+                    <h3 class="mb-3">Appearance</h3>
+                    <div class="form-group mb-3">
+                        <label>Theme</label>
+                        <select id="theme-select" class="form-control">
+                            <option value="light">Light Mode</option>
+                            <option value="dark">Dark Mode</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label>Font Size</label>
+                        <select id="font-select" class="form-control">
+                            <option value="16px">Normal</option>
+                            <option value="18px">Large</option>
+                            <option value="20px">Extra Large</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="backup-reminder-banner" class="banner mb-4" style="display:none;">
+                    <span>⚠️ Last backup was over 7 days ago!</span>
+                    <button id="reminder-backup-btn" class="btn btn-small btn-primary">Backup Now</button>
+                </div>
+
+                <div class="kpi-card mb-4" style="text-align:left;">
+                    <h3 class="mb-2">Google Drive Backup</h3>
+                    <p class="text-muted mb-3">Save your backup securely online.</p>
+                    <div class="form-group mb-3">
+                        <label style="font-size: 12px;">Google OAuth Client ID</label>
+                        <input type="text" id="gdrive-client-id" class="form-control" placeholder="Paste your Client ID here">
+                    </div>
+                    <button id="drive-connect-btn" class="btn btn-primary mb-2">Connect Google Drive</button>
+                    <button id="drive-backup-btn" class="btn btn-outline mb-2" style="display:none;">Backup Now</button>
+                    <button id="drive-restore-btn" class="btn btn-outline" style="display:none;">Restore from Drive</button>
+                </div>
+
+                <div class="kpi-card mb-4" style="text-align:left;">
+                    <h3 class="mb-2">Backup & Restore</h3>
+                    <p class="text-muted mb-3">Backup your data and share via WhatsApp, email, or save to files.</p>
+                    <button id="share-backup-btn" class="btn btn-primary mb-2">📤 Share Backup</button>
+                    <button id="export-local-btn" class="btn btn-outline mb-2">💾 Download Backup (JSON)</button>
+                    <label for="import-local-file" class="btn btn-outline" style="display:inline-block; width:100%;">📥 Import Backup (JSON)</label>
+                    <input type="file" id="import-local-file" style="display:none;" accept=".json">
+                    <p id="backup-status" class="mt-2 text-muted" style="font-size:12px;"></p>
+                </div>
+
+                <div class="kpi-card mb-4" style="text-align:left;">
+                    <h3 class="mb-2">Storage</h3>
+                    <p id="storage-usage" class="mb-3 text-muted">Calculating...</p>
+                    <button id="clear-history-btn" class="btn btn-danger">Clear Old History (>90 days)</button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav id="bottom-nav" class="bottom-nav" style="display:none;">
+            <div class="nav-item active" data-view="view-dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Dashboard</span>
+            </div>
+            <div class="nav-item" data-view="view-katha">
+                <span class="nav-icon">📖</span>
+                <span class="nav-label">Katha</span>
+            </div>
+            <div class="nav-item" data-view="view-history">
+                <span class="nav-icon">🕒</span>
+                <span class="nav-label">History</span>
+            </div>
+        </nav>
+
+        <!-- Modals -->
+        
+        <!-- Add Customer Modal -->
+        <div id="modal-add-customer" class="modal-overlay">
+            <div class="modal-content">
+                <h3 class="mb-4">Add Customer</h3>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="new-cust-name" class="form-control" placeholder="Enter name">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="new-cust-phone" class="form-control" placeholder="10 digit number">
+                </div>
+                <div class="flex-row-between gap-3 mt-4">
+                    <button class="btn btn-outline modal-close" style="flex:1;">Cancel</button>
+                    <button id="save-customer-btn" class="btn btn-primary" style="flex:1;">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Katha Entry Modal -->
+        <div id="modal-add-katha" class="modal-overlay">
+            <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+                <h3 class="mb-4">Add Items</h3>
+                <div id="katha-items-container">
+                    <!-- Item rows go here -->
+                </div>
+                <button id="add-item-row-btn" class="btn btn-outline mb-4">➕ Add Another Item</button>
+                
+                <div class="flex-row-between mb-4">
+                    <span style="font-size: 18px; font-weight: bold;">Total:</span>
+                    <span id="katha-total-amount" class="amount-red" style="font-size: 24px; font-weight: bold;">₹0</span>
+                </div>
+
+                <div class="flex-row-between gap-3 mt-4">
+                    <button class="btn btn-outline modal-close" style="flex:1;">Cancel</button>
+                    <button id="save-katha-btn" class="btn btn-primary" style="flex:1;">Save Katha</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Modal -->
+        <div id="modal-payment" class="modal-overlay">
+            <div class="modal-content">
+                <h3 class="mb-4">Receive Payment</h3>
+                <div class="mb-4 text-center">
+                    <p class="text-muted">Total Outstanding</p>
+                    <p id="pay-total-due" class="amount-red" style="font-size: 28px; font-weight: bold;">₹0</p>
+                </div>
+                <button id="pay-full-btn" class="btn btn-success mb-3">Pay Full Amount</button>
+                <div style="text-align:center; margin-bottom: 12px;" class="text-muted">OR</div>
+                <div class="form-group">
+                    <label>Custom Amount</label>
+                    <input type="number" id="pay-custom-amount" class="form-control" placeholder="₹">
+                </div>
+                <div class="flex-row-between gap-3 mt-4">
+                    <button class="btn btn-outline modal-close" style="flex:1;">Cancel</button>
+                    <button id="pay-custom-btn" class="btn btn-primary" style="flex:1;">Pay Partial</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Config Modal -->
+        <div id="modal-daily-config" class="modal-overlay">
+            <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+                <h3 class="mb-4">Configure Daily Items</h3>
+                <div class="form-group mb-4">
+                    <label>Execution Time (Everyday)</label>
+                    <input type="time" id="daily-time" class="form-control" value="06:00">
+                </div>
+                <div id="daily-items-container">
+                    <!-- Item rows go here -->
+                </div>
+                <button id="add-daily-item-row-btn" class="btn btn-outline mb-4">➕ Add Item</button>
+                
+                <div class="flex-row-between gap-3 mt-4">
+                    <button class="btn btn-outline modal-close" style="flex:1;">Cancel</button>
+                    <button id="save-daily-btn" class="btn btn-primary" style="flex:1;">Save Config</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="db.js"></script>
+    <script src="scheduler.js"></script>
+    <script src="pdf.js"></script>
+    <script src="backup.js"></script>
+    <script src="app.js"></script>
+    
+    <!-- Initialize PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('SW registered'))
+                    .catch(err => console.log('SW ref failed', err));
+            });
+        }
+    </script>
+</body>
+</html>
