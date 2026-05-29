@@ -9,15 +9,15 @@
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     
-    <!-- CDN Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- All Libraries Bundled Locally for Offline Use -->
+    <script src="lib/dexie.min.js"></script>
+    <script src="lib/chart.umd.min.js"></script>
     <script src="lib/jspdf.umd.min.js"></script>
     <script src="lib/lz-string.min.js"></script>
     
     <!-- CACHE BUSTER -->
     <script>
-        const APP_VER = 'v6';
+        const APP_VER = 'v7';
         if (localStorage.getItem('app_version') !== APP_VER) {
             Promise.all([
                 'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister()))) : Promise.resolve(),

@@ -1,57 +1,67 @@
-importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
+const CACHE_NAME = 'sskg-app-v5';
+const ASSETS = [
+    '/',
+    '/index.html',
+    '/style.css',
+    '/app.js',
+    '/db.js',
+    '/scheduler.js',
+    '/pdf.js',
+    '/backup.js',
+    '/manifest.json',
+    '/lib/jspdf.umd.min.js',
+    '/lib/lz-string.min.js',
+    '/lib/dexie.min.js',
+    '/lib/chart.umd.min.js',
+    '/fonts/inter-400.ttf',
+    '/fonts/inter-500.ttf',
+    '/fonts/inter-600.ttf',
+    '/fonts/inter-700.ttf'
+];
 
-if (workbox) {
-  console.log(`Workbox is loaded`);
-
-  // Force activate
-  workbox.core.skipWaiting();
-  workbox.core.clientsClaim();
-
-  const CURRENT_CACHE_V = 'v4';
-  const APP_CACHE = `sskg-app-files-${CURRENT_CACHE_V}`;
-  const CDN_CACHE = `sskg-cdn-libs-${CURRENT_CACHE_V}`;
-
-  self.addEventListener('activate', (event) => {
+// Install: cache all app files
+self.addEventListener('install', (event) => {
     event.waitUntil(
-      caches.keys().then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== APP_CACHE && cacheName !== CDN_CACHE && cacheName.startsWith('sskg-')) {
-              console.log('Deleting old cache:', cacheName);
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      })
+        caches.open(CACHE_NAME).then((cache) => {
+            console.log('Caching all app assets for offline use');
+            return cache.addAll(ASSETS);
+        })
     );
-  });
+    self.skipWaiting();
+});
 
-  // Cache our local app files heavily (Cache First strategy)
-  // These files change rarely, and we want 100% offline support
-  workbox.routing.registerRoute(
-    ({request, url}) => {
-      const localFiles = ['/', '/index.html', '/style.css', '/app.js', '/db.js', '/scheduler.js', '/pdf.js', '/backup.js', '/manifest.json', '/lib/jspdf.umd.min.js', '/lib/lz-string.min.js'];
-      return localFiles.includes(url.pathname);
-    },
-    new workbox.strategies.CacheFirst({
-      cacheName: APP_CACHE,
-      plugins: [
-        new workbox.expiration.ExpirationPlugin({
-          maxEntries: 20,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
-        }),
-      ],
-    })
-  );
+// Activate: delete old caches
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((name) => {
+                    if (name !== CACHE_NAME) {
+                        console.log('Deleting old cache:', name);
+                        return caches.delete(name);
+                    }
+                })
+            );
+        })
+    );
+    self.clients.claim();
+});
 
-  // Let browser cache CDNs on its own, but we can StaleWhileRevalidate them just in case
-  workbox.routing.registerRoute(
-    ({url}) => url.origin === 'https://cdn.jsdelivr.net' || url.origin === 'https://cdnjs.cloudflare.com',
-    new workbox.strategies.StaleWhileRevalidate({
-      cacheName: CDN_CACHE,
-    })
-  );
-  
-} else {
-  console.log(`Workbox didn't load`);
-}
+// Fetch: serve from cache first, fallback to network
+self.addEventListener('fetch', (event) => {
+    // Skip Google Drive API / Google auth requests — they must always go to network
+    if (event.request.url.includes('googleapis.com') || event.request.url.includes('accounts.google.com')) {
+        return;
+    }
+
+    event.respondWith(
+        caches.match(event.request).then((cached) => {
+            return cached || fetch(event.request).catch(() => {
+                // If both cache miss and network fail, return offline page
+                if (event.request.mode === 'navigate') {
+                    return caches.match('/index.html');
+                }
+            });
+        })
+    );
+});

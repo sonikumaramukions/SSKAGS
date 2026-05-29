@@ -437,14 +437,14 @@ function setupModals() {
                 if (contacts.length > 0) {
                     const c = contacts[0];
                     document.getElementById('new-cust-name').value = c.name ? c.name[0] : '';
-                    document.getElementById('new-cust-phone').value = c.tel ? c.tel[0].replace(/\\D/g,'') : '';
+                    document.getElementById('new-cust-phone').value = c.tel ? c.tel[0].replace(/\D/g,'') : '';
                     document.getElementById('modal-add-customer').classList.add('active');
                 }
             } catch (ex) {
-                alert("Contact picker failed. Ensure you are using HTTPS and a supported browser (Chrome on Android). Please use 'Add Manually'.");
+                alert("Contact picker failed. Please use 'Add Manually' or check app permissions.");
             }
         } else {
-            alert("Contact picker requires an HTTPS connection and is only supported on Chrome for Android. Please use 'Add Manually'.");
+            alert("Contact picker is not supported in this environment. Please use 'Add Manually'.");
         }
     });
 }
