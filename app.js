@@ -441,10 +441,10 @@ function setupModals() {
                     document.getElementById('modal-add-customer').classList.add('active');
                 }
             } catch (ex) {
-                alert("Contact picker failed or not supported.");
+                alert("Contact picker failed. Ensure you are using HTTPS and a supported browser (Chrome on Android). Please use 'Add Manually'.");
             }
         } else {
-            alert("Contact picker not supported on this device.");
+            alert("Contact picker requires an HTTPS connection and is only supported on Chrome for Android. Please use 'Add Manually'.");
         }
     });
 }
